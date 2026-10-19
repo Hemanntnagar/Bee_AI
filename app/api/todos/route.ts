@@ -19,7 +19,11 @@ export async function POST(req: Request) {
       text: string;
       alarmAt?: string;
     };
-    const todo = await createTodo(text, alarmAt);
+    const trimmed = text?.trim();
+    if (!trimmed) {
+      return NextResponse.json({ error: "Todo text is required" }, { status: 400 });
+    }
+    const todo = await createTodo(trimmed, alarmAt);
     return NextResponse.json({ todo });
   } catch (e) {
     return NextResponse.json(

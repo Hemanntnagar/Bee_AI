@@ -1,34 +1,30 @@
-import Link from "next/link";
 import { SetupBanner } from "@/components/SetupBanner";
+import { TodayDashboard } from "@/components/TodayDashboard";
 import {
   checkBeeHealth,
   getMe,
   listConversations,
+  listTodoSuggestions,
   listTodos,
 } from "@/lib/bee/client";
 import { getDueCards, readStore } from "@/lib/store/persist";
+import type { TodayPayload } from "@/lib/today/types";
 
-function formatWhen(ms?: number) {
-  if (!ms) return "";
-  return new Date(ms).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+export const dynamic = "force-dynamic";
 
-async function loadToday() {
-  const [user, convos, todos, store] = await Promise.all([
+async function loadToday(): Promise<TodayPayload> {
+  const [user, convos, todos, suggestions, store] = await Promise.all([
     getMe(),
-    listConversations(15),
+    listConversations(20),
     listTodos(),
+    listTodoSuggestions(),
     readStore(),
   ]);
   return {
     user,
     conversations: convos.items,
     openTodos: todos.filter((t) => !t.completed),
+    suggestions,
     dueCards: getDueCards(store.cards),
     processedConversationIds: store.processedConversationIds,
   };
@@ -36,7 +32,7 @@ async function loadToday() {
 
 export default async function HomePage() {
   const health = await checkBeeHealth();
-  let today: Awaited<ReturnType<typeof loadToday>> | null = null;
+  let today: TodayPayload | null = null;
   if (health.ok) {
     try {
       today = await loadToday();
@@ -48,111 +44,37 @@ export default async function HomePage() {
   if (!health.ok && !health.mock) {
     return (
       <>
-        <h1 className="font-[family-name:var(--font-fraunces)] text-4xl text-[var(--accent)] mb-2">
+        <h1 className="mb-2 font-[family-name:var(--font-fraunces)] text-3xl text-[var(--green)] sm:text-4xl">
           Bee Loop
         </h1>
-        <p className="text-[var(--text-muted)] mb-6 max-w-xl">
-          Connect your Bee wearable memory to study reviews and commitment follow-through.
+        <p className="mb-6 max-w-xl text-[var(--text-muted)]">
+          Connect your Bee wearable memory to study reviews and commitment
+          follow-through — or run <code className="bl-code">npm run demo</code>{" "}
+          with fixtures.
         </p>
         <SetupBanner message={health.error} />
       </>
     );
   }
 
-  const name = today?.user?.name ?? health.user?.name ?? "there";
-  const convos = today?.conversations ?? [];
-  const openTodos = today?.openTodos ?? [];
-  const dueCount = today?.dueCards?.length ?? 0;
-  const processed = new Set(today?.processedConversationIds ?? []);
-
-  return (
-    <>
-      <div className="mb-10">
-        <p className="text-sm uppercase tracking-widest text-[var(--text-muted)] mb-1">
-          Today Loop
-        </p>
-        <h1 className="font-[family-name:var(--font-fraunces)] text-4xl text-[var(--accent)]">
+  if (!today) {
+    return (
+      <>
+        <h1 className="mb-2 font-[family-name:var(--font-fraunces)] text-3xl text-[var(--green)] sm:text-4xl">
           Bee Loop
         </h1>
-        <p className="mt-3 text-[var(--text-muted)] max-w-2xl">
-          Hello, {name}. Turn captured conversations into study cards and close open commitments.
-          {health.mock ? " (fixtures mode)" : ""}
-        </p>
-      </div>
+        <SetupBanner message="Connected, but failed to load today data. Retry or check bee proxy logs." />
+      </>
+    );
+  }
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        <section>
-          <h2 className="text-lg font-medium mb-4 border-b border-[var(--line)] pb-2">
-            Recent conversations
-          </h2>
-          <ul className="space-y-3">
-            {convos.length === 0 && (
-              <li className="text-sm text-[var(--text-muted)]">
-                No conversations yet. Capture audio on Bee, then refresh.
-              </li>
-            )}
-            {convos.map((c) => (
-              <li key={String(c.id)}>
-                <Link
-                  href={`/conversation/${c.id}`}
-                  className="block rounded-md border border-[var(--line)] px-4 py-3 hover:border-[var(--accent-dim)] transition-colors"
-                >
-                  <span className="text-xs text-[var(--text-muted)]">
-                    {formatWhen(c.startedAt)}
-                    {processed.has(String(c.id)) ? " · processed" : ""}
-                  </span>
-                  <p className="mt-1 text-sm leading-snug">
-                    {c.summary ?? `Conversation ${c.id}`}
-                  </p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+  const name = today.user?.name ?? health.user?.name ?? "there";
 
-        <section>
-          <h2 className="text-lg font-medium mb-4 border-b border-[var(--line)] pb-2">
-            Open commitments
-          </h2>
-          <ul className="space-y-2 mb-4">
-            {openTodos.length === 0 && (
-              <li className="text-sm text-[var(--text-muted)]">No open Bee todos.</li>
-            )}
-            {openTodos.slice(0, 6).map((t) => (
-              <li
-                key={String(t.id)}
-                className="text-sm pl-3 border-l-2 border-[var(--accent-dim)]"
-              >
-                {t.text}
-              </li>
-            ))}
-          </ul>
-          <Link
-            href="/inbox"
-            className="text-sm text-[var(--accent)] hover:underline"
-          >
-            Open commitment inbox →
-          </Link>
-        </section>
-
-        <section>
-          <h2 className="text-lg font-medium mb-4 border-b border-[var(--line)] pb-2">
-            Study decks due
-          </h2>
-          <p className="text-5xl font-[family-name:var(--font-fraunces)] text-[var(--accent)]">
-            {dueCount}
-          </p>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            cards ready for review from processed conversations
-          </p>
-          <Link
-            href="/review"
-            className="mt-6 inline-block rounded-md bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-[var(--bg-deep)] hover:bg-[var(--accent-dim)]"
-          >
-            Start review
-          </Link>
-        </section>
-      </div>
-    </>
+  return (
+    <TodayDashboard
+      initial={today}
+      greetingName={name}
+      mock={health.mock}
+    />
   );
 }

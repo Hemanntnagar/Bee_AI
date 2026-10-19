@@ -1,0 +1,6 @@
+{
+  "framework": "nextjs",
+  "env": {
+    "BEE_MOCK": "1"
+  }
+}

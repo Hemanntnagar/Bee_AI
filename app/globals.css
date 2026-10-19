@@ -1,27 +1,237 @@
 @import "tailwindcss";
 
 :root {
-  --bg-deep: #0c1220;
-  --bg-mid: #141f33;
-  --accent: #e8a317;
-  --accent-dim: #c48612;
-  --text: #f4f0e6;
-  --text-muted: #9aa8bc;
-  --line: rgba(232, 163, 23, 0.15);
+  /* Brand palette */
+  --cream: #f9ebd7;
+  --green: #046a38;
+  --green-dark: #03522b;
+  --green-soft: #e6f2eb;
+  --orange: #e34222;
+  --orange-dark: #c4351a;
+  --orange-soft: #fde8e3;
+
+  /* Semantic aliases (used across the app) */
+  --bg-deep: var(--cream);
+  --bg-mid: #fff8ee;
+  --bg-elevated: #ffffff;
+  --accent: var(--green);
+  --accent-dim: var(--green-dark);
+  --highlight: var(--orange);
+  --text: #142820;
+  --text-muted: #5c6f64;
+  --line: rgba(4, 106, 56, 0.16);
+  --line-strong: rgba(4, 106, 56, 0.28);
+  --on-primary: #f9ebd7;
+  --shadow: 0 1px 2px rgba(20, 40, 32, 0.06), 0 8px 24px rgba(4, 106, 56, 0.08);
+  --shadow-sm: 0 1px 3px rgba(20, 40, 32, 0.08);
+  --radius: 12px;
+  --radius-sm: 8px;
 }
 
 @theme inline {
-  --color-background: var(--bg-deep);
+  --color-background: var(--cream);
   --color-foreground: var(--text);
   --font-sans: var(--font-dm-sans);
   --font-display: var(--font-fraunces);
 }
 
 body {
-  background: var(--bg-deep);
+  background: var(--cream);
   color: var(--text);
   min-height: 100vh;
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(232, 163, 23, 0.12), transparent),
-    linear-gradient(180deg, var(--bg-mid) 0%, var(--bg-deep) 45%);
+    radial-gradient(ellipse 70% 40% at 100% 0%, rgba(4, 106, 56, 0.07), transparent),
+    radial-gradient(ellipse 50% 35% at 0% 100%, rgba(227, 66, 34, 0.06), transparent);
+}
+
+/* Shared UI primitives */
+.bl-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.bl-panel {
+  background: var(--bg-mid);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.bl-input {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bl-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(4, 106, 56, 0.15);
+}
+
+.bl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+}
+
+/* Links styled as buttons must keep button text colors (not page link color) */
+a.bl-btn-primary {
+  color: var(--on-primary);
+}
+a.bl-btn-secondary {
+  color: var(--green);
+}
+a.bl-btn-accent {
+  color: #fff;
+}
+
+.bl-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bl-btn-primary {
+  background: var(--green);
+  color: var(--on-primary);
+  border: 1px solid var(--green);
+}
+
+.bl-btn-primary:hover:not(:disabled) {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+}
+
+.bl-btn-secondary {
+  background: transparent;
+  color: var(--green);
+  border: 1px solid var(--line-strong);
+}
+
+.bl-btn-secondary:hover:not(:disabled) {
+  background: var(--green-soft);
+}
+
+.bl-btn-accent {
+  background: var(--orange);
+  color: #fff;
+  border: 1px solid var(--orange);
+}
+
+.bl-btn-accent:hover:not(:disabled) {
+  background: var(--orange-dark);
+  border-color: var(--orange-dark);
+}
+
+.bl-btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+}
+
+.bl-btn-ghost:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(4, 106, 56, 0.06);
+}
+
+.bl-alert-error {
+  border: 1px solid rgba(227, 66, 34, 0.35);
+  background: var(--orange-soft);
+  color: var(--orange-dark);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+
+.bl-alert-success {
+  border: 1px solid rgba(4, 106, 56, 0.3);
+  background: var(--green-soft);
+  color: var(--green-dark);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+
+.bl-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.bl-chip:hover {
+  border-color: var(--green);
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.bl-section-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.bl-link {
+  color: var(--green);
+  text-underline-offset: 2px;
+}
+
+.bl-link:hover {
+  text-decoration: underline;
+}
+
+.bl-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85em;
+  color: var(--green-dark);
+  background: var(--green-soft);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+pre.bl-pre {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  font-size: 0.75rem;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+::selection {
+  background: rgba(4, 106, 56, 0.2);
+  color: var(--text);
+}
+
+/* Hide default disclosure marker for mobile nav */
+header details summary::-webkit-details-marker {
+  display: none;
+}
+header details summary::marker {
+  content: "";
 }

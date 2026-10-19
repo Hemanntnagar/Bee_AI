@@ -9,13 +9,23 @@ import type {
   BeeTodo,
   BeeTodoSuggestion,
   BeeUser,
+  BeeUtterance,
   ListResponse,
+  SearchHit,
 } from "./types";
 
 const DEFAULT_PROXY = "http://127.0.0.1:8787";
 
 export function isMockMode(): boolean {
-  return process.env.BEE_MOCK === "1" || process.env.BEE_MOCK === "true";
+  // Explicit off wins (local live proxy against a Vercel-like env).
+  if (process.env.BEE_MOCK === "0" || process.env.BEE_MOCK === "false") {
+    return false;
+  }
+  // Fixtures on Vercel by default — Bee proxy is localhost-only.
+  if (process.env.BEE_MOCK === "1" || process.env.BEE_MOCK === "true") {
+    return true;
+  }
+  return process.env.VERCEL === "1";
 }
 
 function proxyBase(): string {
@@ -27,14 +37,25 @@ async function beeFetch<T>(
   init?: RequestInit
 ): Promise<T> {
   const url = `${proxyBase()}${path.startsWith("/") ? path : `/${path}`}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+      cache: "no-store",
+    });
+  } catch (e) {
+    const hint =
+      e instanceof Error && /fetch failed|ECONNREFUSED|network/i.test(e.message)
+        ? ` Cannot reach Bee proxy at ${proxyBase()}. Run: bee login && bee proxy`
+        : "";
+    throw new Error(
+      `Bee proxy unreachable.${hint}${e instanceof Error ? ` (${e.message})` : ""}`
+    );
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`Bee proxy ${res.status}: ${body.slice(0, 200)}`);
@@ -69,12 +90,61 @@ export async function getMe(): Promise<BeeUser> {
   return beeFetch<BeeUser>("/v1/me");
 }
 
+function toEpochMs(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value < 1e12 ? value * 1000 : value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+/** Normalize Bee API / mock conversation shapes into one client model. */
+export function normalizeConversation(raw: BeeConversation): BeeConversation {
+  const utterances: BeeUtterance[] = [...(raw.utterances ?? [])];
+
+  for (const block of raw.transcriptions ?? []) {
+    for (const u of block.utterances ?? []) {
+      utterances.push(u);
+    }
+    for (const line of block.lines ?? []) {
+      if (line.text) {
+        utterances.push({ speaker: line.speaker, text: line.text });
+      }
+    }
+  }
+
+  const summary =
+    raw.summary ||
+    raw.short_summary ||
+    raw.title ||
+    undefined;
+
+  return {
+    ...raw,
+    summary,
+    startedAt:
+      raw.startedAt ??
+      toEpochMs(raw.started_at) ??
+      toEpochMs(raw.start_time),
+    endedAt:
+      raw.endedAt ?? toEpochMs(raw.ended_at) ?? toEpochMs(raw.end_time),
+    utterances,
+  };
+}
+
 export async function listConversations(
   limit = 20,
   cursor?: string
 ): Promise<{ items: BeeConversation[]; next_cursor: string | null }> {
   if (isMockMode()) {
-    return { items: mockConversations, next_cursor: null };
+    const items = mockConversations
+      .map(normalizeConversation)
+      .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))
+      .slice(0, limit);
+    return { items, next_cursor: null };
   }
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set("cursor", cursor);
@@ -84,7 +154,9 @@ export async function listConversations(
   const items =
     data.items ?? data.conversations ?? (Array.isArray(data) ? data : []);
   return {
-    items: items as BeeConversation[],
+    items: (items as BeeConversation[])
+      .map(normalizeConversation)
+      .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0)),
     next_cursor: data.next_cursor ?? null,
   };
 }
@@ -95,9 +167,10 @@ export async function getConversation(
   if (isMockMode()) {
     const found = mockConversations.find((c) => String(c.id) === id);
     if (!found) throw new Error("Conversation not found");
-    return found;
+    return normalizeConversation(found);
   }
-  return beeFetch<BeeConversation>(`/v1/conversations/${id}`);
+  const raw = await beeFetch<BeeConversation>(`/v1/conversations/${id}`);
+  return normalizeConversation(raw);
 }
 
 export async function listTodos(): Promise<BeeTodo[]> {
@@ -138,8 +211,108 @@ export async function updateTodo(
   });
 }
 
+export type SearchConversationsOpts = {
+  query: string;
+  limit?: number;
+  mode?: "keyword" | "neural";
+};
+
+function conversationMatchesQuery(c: BeeConversation, query: string): boolean {
+  const q = query.toLowerCase().trim();
+  if (!q) return false;
+  const terms = q.split(/\s+/).filter(Boolean);
+  const hay = [
+    c.summary,
+    c.title,
+    c.short_summary,
+    ...(c.utterances ?? []).map((u) => `${u.speaker ?? ""} ${u.text ?? ""}`),
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
+  return terms.every((t) => hay.includes(t));
+}
+
+function hitFromConversation(c: BeeConversation): SearchHit {
+  return {
+    type: "conversation",
+    conversation: normalizeConversation(c),
+  };
+}
+
+export async function searchConversations(
+  opts: SearchConversationsOpts
+): Promise<{ hits: SearchHit[]; query: string }> {
+  const query = opts.query.trim();
+  const limit = opts.limit ?? 20;
+  if (!query) return { hits: [], query };
+
+  if (isMockMode()) {
+    const hits = mockConversations
+      .filter((c) => conversationMatchesQuery(c, query))
+      .slice(0, limit)
+      .map(hitFromConversation);
+    return { hits, query };
+  }
+
+  const mode = opts.mode ?? "keyword";
+  const path =
+    mode === "neural"
+      ? "/v1/search/conversations/neural"
+      : "/v1/search/conversations";
+
+  try {
+    const data = await beeFetch<{
+      items?: SearchHit[] | BeeConversation[];
+      results?: SearchHit[] | BeeConversation[];
+      conversations?: BeeConversation[];
+      hits?: SearchHit[];
+    }>(path, {
+      method: "POST",
+      body: JSON.stringify({ query, limit, cursor: null }),
+    });
+
+    const raw =
+      data.hits ??
+      data.items ??
+      data.results ??
+      data.conversations ??
+      [];
+
+    const hits: SearchHit[] = (raw as unknown[]).map((row) => {
+      const r = row as SearchHit & BeeConversation;
+      if (r.conversation || r.type === "conversation" || r.daily || r.fact) {
+        return {
+          ...r,
+          conversation: r.conversation
+            ? normalizeConversation(r.conversation)
+            : undefined,
+        };
+      }
+      return hitFromConversation(r as BeeConversation);
+    });
+
+    return { hits: hits.slice(0, limit), query };
+  } catch {
+    // Fallback: local filter over recent conversations if search endpoint fails
+    const { items } = await listConversations(Math.max(limit, 30));
+    const hits = items
+      .filter((c) => conversationMatchesQuery(c, query))
+      .slice(0, limit)
+      .map(hitFromConversation);
+    return { hits, query };
+  }
+}
+
+/** In-memory mock suggestion state (process lifetime). */
+const mockHandledSuggestions = new Set<string>();
+
 export async function listTodoSuggestions(): Promise<BeeTodoSuggestion[]> {
-  if (isMockMode()) return mockTodoSuggestions;
+  if (isMockMode()) {
+    return mockTodoSuggestions.filter(
+      (s) => !mockHandledSuggestions.has(String(s.id))
+    );
+  }
   try {
     const data = await beeFetch<ListResponse<BeeTodoSuggestion>>(
       "/v1/todoSuggestions"
@@ -151,12 +324,26 @@ export async function listTodoSuggestions(): Promise<BeeTodoSuggestion[]> {
 }
 
 export async function acceptTodoSuggestion(id: string): Promise<void> {
-  if (isMockMode()) return;
+  if (isMockMode()) {
+    mockHandledSuggestions.add(String(id));
+    const sug = mockTodoSuggestions.find((s) => String(s.id) === String(id));
+    if (sug) {
+      mockTodos.push({
+        id: `todo-from-sug-${id}`,
+        text: sug.text,
+        completed: false,
+      });
+    }
+    return;
+  }
   await beeFetch(`/v1/todoSuggestions/${id}/accept`, { method: "POST" });
 }
 
 export async function dismissTodoSuggestion(id: string): Promise<void> {
-  if (isMockMode()) return;
+  if (isMockMode()) {
+    mockHandledSuggestions.add(String(id));
+    return;
+  }
   await beeFetch(`/v1/todoSuggestions/${id}/dismiss`, { method: "POST" });
 }
 

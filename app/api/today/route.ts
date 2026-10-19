@@ -1,5 +1,7 @@
 import {
+  checkBeeHealth,
   getMe,
+  isMockMode,
   listConversations,
   listTodoSuggestions,
   listTodos,
@@ -9,9 +11,17 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
+    const health = await checkBeeHealth();
+    if (!health.ok && !health.mock) {
+      return NextResponse.json(
+        { error: health.error ?? "Bee proxy not connected", ok: false },
+        { status: 502 }
+      );
+    }
+
     const [user, convos, todos, suggestions, store] = await Promise.all([
       getMe(),
-      listConversations(15),
+      listConversations(20),
       listTodos(),
       listTodoSuggestions(),
       readStore(),
@@ -19,6 +29,8 @@ export async function GET() {
     const dueCards = getDueCards(store.cards);
     const openTodos = todos.filter((t) => !t.completed);
     return NextResponse.json({
+      ok: true,
+      mock: isMockMode() || health.mock,
       user,
       conversations: convos.items,
       todos,

@@ -7,7 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "setup:bee": "bash scripts/setup-bee.sh"
+    "setup:bee": "bash scripts/setup-bee.sh",
+    "demo": "bash scripts/demo.sh mock",
+    "demo:live": "bash scripts/demo.sh live",
+    "demo:reset": "bash scripts/demo.sh reset",
+    "demo:seed": "bash scripts/demo.sh reset-seed",
+    "agent": "node scripts/agent/bee-loop-agent.mjs",
+    "agent:status": "node scripts/agent/bee-loop-agent.mjs status",
+    "agent:today": "node scripts/agent/bee-loop-agent.mjs today",
+    "agent:due": "node scripts/agent/bee-loop-agent.mjs due",
+    "agent:search": "node scripts/agent/bee-loop-agent.mjs search",
+    "agent:process": "node scripts/agent/bee-loop-agent.mjs process",
+    "agent:push-todo": "node scripts/agent/bee-loop-agent.mjs push-todo"
   },
   "dependencies": {
     "next": "^15.5.4",

@@ -14,14 +14,25 @@ export type BeeUtterance = {
   timestamp?: number;
 };
 
+export type BeeTranscriptionBlock = {
+  utterances?: BeeUtterance[];
+  lines?: { speaker?: string; text?: string }[];
+};
+
 export type BeeConversation = {
   id: number | string;
   summary?: string;
+  short_summary?: string;
   title?: string;
   startedAt?: number;
   endedAt?: number;
+  started_at?: number | string;
+  ended_at?: number | string;
+  start_time?: number | string;
+  end_time?: number | string;
   state?: string;
   utterances?: BeeUtterance[];
+  transcriptions?: BeeTranscriptionBlock[];
 };
 
 export type BeeTodo = {
